@@ -26,12 +26,7 @@ var assert = require('assert');
 
 var exeunt = require('exeunt');
 
-try {
-    var moment = require('moment');
-} catch (e) {
-    moment = null;
-}
-
+import { format, addMinutes, subMinutes } from 'date-fns'
 
 //---- globals and constants
 
@@ -525,10 +520,6 @@ function parseArgv(argv) {
                 break;
             case '-L':
                 parsed.timeFormat = TIME_LOCAL;
-                if (!moment) {
-                    throw new Error(
-                        'could not find moment package required for "-L"');
-                }
                 break;
             case '--time':
                 var timeArg = args.shift();
@@ -538,10 +529,6 @@ function parseArgv(argv) {
                     break
                 case 'local':
                     parsed.timeFormat = TIME_LOCAL;
-                    if (!moment) {
-                        throw new Error('could not find moment package '
-                            + 'required for "--time=local"');
-                    }
                     break
                 case undefined:
                     throw new Error('missing argument to "--time"');
@@ -790,21 +777,20 @@ function emitRecord(rec, line, opts, stylize) {
         delete rec.v;
 
         // Time.
-        var time;
+        var time = rec.time;
         if (!short && opts.timeFormat === TIME_UTC) {
             // Fast default path: We assume the raw `rec.time` is a UTC time
             // in ISO 8601 format (per spec).
-            time = '[' + rec.time + ']';
-        } else if (!moment && opts.timeFormat === TIME_UTC) {
-            // Don't require momentjs install, as long as not using TIME_LOCAL.
-            time = rec.time.substr(11);
+            time = '[' + time + ']';
+        } else if (opts.timeFormat === TIME_UTC) {
+            time = time.substr(11);
         } else {
             var tzFormat;
-            var moTime = moment(rec.time);
             switch (opts.timeFormat) {
             case TIME_UTC:
                 tzFormat = TIMEZONE_UTC_FORMATS[short ? 'short' : 'long'];
-                moTime.utc();
+                const offset = time.getTimezoneOffset();
+                time = Math.sign(offset) !== -1 ? addMinutes(time, offset) : subMinutes(time, Math.abs(offset));
                 break;
             case TIME_LOCAL:
                 tzFormat = TIMEZONE_LOCAL_FORMATS[short ? 'short' : 'long'];
@@ -812,7 +798,7 @@ function emitRecord(rec, line, opts, stylize) {
             default:
                 throw new Error('unexpected timeFormat: ' + opts.timeFormat);
             };
-            time = moTime.format(tzFormat);
+            time = format(time, tzFormat);
         }
         time = stylize(time, 'none');
         delete rec.time;
